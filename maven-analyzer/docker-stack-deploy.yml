@@ -1,0 +1,56 @@
+version: '3'
+services:
+  #publisher service
+  producer:
+    image: amineben/producer:miner-$TAG
+    deploy:
+      update_config:
+        delay: 15s
+      restart_policy:
+        condition: on-failure
+    depends_on:
+      - neo4j
+      - rabbitmq
+    command: dockerize -wait http://rabbitmq:15672 -timeout 30s /dist/run-producer.sh --queue rabbitmq:5672
+
+  #consumer service
+  consumer:
+    image: amineben/consumer:miner-$TAG
+    deploy:
+      replicas: $REPLICAS
+      update_config:
+        delay: 30s
+      restart_policy:
+        condition: on-failure
+    depends_on:
+      - neo4j
+      - rabbitmq
+    command: dockerize -wait http://neo4j:7474  -wait http://rabbitmq:15672/#/queues/%2F/artifactsQueue -timeout 30s /dist/run-consumer.sh --db neo4j:7687 --queue rabbitmq:5672
+
+  #neo4j service
+  neo4j:
+    image: amineben/neo3j:miner-$TAG
+    volumes:
+      - "$NEO4J_VAR/data:/data"
+      #- "$NEO4J_VAR/logs:/logs"
+    ports:
+      - "7474:7474"
+      - "7687:7687"
+    env_file:
+      - neo4j.env
+    deploy:
+      placement:
+        constraints: [node.role == manager]
+  #rabbit mq service
+  rabbitmq:
+    image: amineben/rabbitmq:miner-$TAG
+    ports:
+      - "15672:15672"
+      - "5672:5672"
+    volumes:
+      - $RABBIT_VAR:/data/mnesia
+    environment:
+      RABBITMQ_NODENAME: node@rabbitmq
+    deploy:
+      placement:
+        constraints: [node.role == manager]
